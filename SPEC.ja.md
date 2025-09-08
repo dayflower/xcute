@@ -30,18 +30,63 @@ cat words.txt | xcute echo hello {}, thanks {}
 ### 1. 直接実行モード（デフォルト）
 コマンドを直接実行します。空白文字が含まれる入力でも、引数として単一の値として扱われます。
 
+**引数の扱い**:
+- コマンドライン引数はそのまま使用され、文字列の結合や再解析は行われません
+- 例: `xcute echo hello {}` では `["echo", "hello", "{}"]` という引数リストが使用されます
+
 ```bash
 cat input.txt | xcute echo {}
+cat input.txt | xcute echo hello {}
+cat input.txt | xcute cp {} backup/
 ```
 
 ### 2. シェル実行モード（`-c`オプション）
 シェルを通じてコマンドを実行します。複雑なシェルコマンドを実行できますが、空白文字の扱いに注意が必要です。
 
+**引数の扱い**:
+- `-c`オプション使用時は、その後の引数を1つの文字列として扱います
+- `-c`オプション以降に複数の引数がある場合はエラーになります
+- 正しい使用例: `xcute -c 'echo hello {}'`
+- 誤った使用例: `xcute -c 'echo hello {}' extra_arg` （エラー）
+
 ```bash
 cat words.txt | xcute -c 'echo hello {} && echo thanks {}'
+cat files.txt | xcute -c 'wc -l {} | head -1'
 ```
 
 **注意**: シェル実行モードでは、入力に空白文字が含まれる場合、ユーザーが適切にクォーテーションで囲む必要があります。
+
+## コマンドライン引数の仕様
+
+### 一般的な形式
+```
+xcute [OPTIONS] COMMAND_TEMPLATE
+```
+
+### 直接実行モード
+```
+xcute [OPTIONS] COMMAND ARG1 ARG2 ...
+```
+- `COMMAND`、`ARG1`、`ARG2`等の各引数はそのまま実行時に使用されます
+- プレースホルダー`{}`を含む引数は、標準入力の各行で置換されます
+
+### シェル実行モード
+```
+xcute [OPTIONS] -c 'SHELL_COMMAND'
+```
+- `-c`オプションの後には**1つの引数のみ**を指定できます
+- その引数はシェルコマンドとして解釈されます
+- `-c`オプション使用時に複数の引数が指定された場合はエラーとなります
+
+### エラーとなるケース
+```bash
+# シェル実行モードで複数引数を指定
+xcute -c 'echo {}' extra_argument  # エラー
+
+# 引数なし
+xcute                              # エラー
+xcute -c                          # エラー
+```
 
 ## オプション
 
