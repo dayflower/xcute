@@ -8,6 +8,8 @@ import (
 	"os/exec"
 	"strings"
 	"time"
+
+	"github.com/fatih/color"
 )
 
 type Options struct {
@@ -20,14 +22,13 @@ type Options struct {
 	shellMode   bool
 }
 
-// ANSI color codes
-const (
-	ColorReset  = "\033[0m"
-	ColorRed    = "\033[31m"
-	ColorGreen  = "\033[32m"
-	ColorYellow = "\033[33m"
-	ColorBlue   = "\033[34m"
-	ColorCyan   = "\033[36m"
+// Color functions for output
+var (
+	colorError     = color.New(color.FgRed)
+	colorSuccess   = color.New(color.FgGreen)
+	colorWarning   = color.New(color.FgYellow)
+	colorCommand   = color.New(color.FgBlue)
+	colorTarget    = color.New(color.FgCyan)
 )
 
 func main() {
@@ -75,13 +76,13 @@ func processStdin(opts Options, args []string) error {
 		// Handle empty lines
 		if line == "" {
 			if opts.showWhat || opts.showCommand {
-				fmt.Fprintf(os.Stderr, "%s[empty line]%s\n", ColorYellow, ColorReset)
+				colorWarning.Fprintf(os.Stderr, "[empty line]\n")
 			}
 			continue
 		}
 
 		if opts.showWhat {
-			fmt.Fprintf(os.Stderr, "%s%s%s\n", ColorCyan, line, ColorReset)
+			colorTarget.Fprintf(os.Stderr, "%s\n", line)
 		}
 
 		// Replace placeholders and prepare command
@@ -94,7 +95,7 @@ func processStdin(opts Options, args []string) error {
 			commandDisplay = command
 			
 			if opts.showCommand {
-				fmt.Fprintf(os.Stderr, "%s> %s%s\n", ColorBlue, command, ColorReset)
+				colorCommand.Fprintf(os.Stderr, "> %s\n", command)
 			}
 
 			if opts.dryRun {
@@ -121,7 +122,7 @@ func processStdin(opts Options, args []string) error {
 			commandDisplay = strings.Join(commandArgs, " ")
 			
 			if opts.showCommand {
-				fmt.Fprintf(os.Stderr, "%s> %s%s\n", ColorBlue, commandDisplay, ColorReset)
+				colorCommand.Fprintf(os.Stderr, "> %s\n", commandDisplay)
 			}
 
 			if opts.dryRun {
@@ -143,9 +144,9 @@ func processStdin(opts Options, args []string) error {
 
 		if opts.showCommand {
 			if exitCode == 0 {
-				fmt.Fprintf(os.Stderr, "%s[exit: %d]%s\n", ColorGreen, exitCode, ColorReset)
+				colorSuccess.Fprintf(os.Stderr, "[exit: %d]\n", exitCode)
 			} else {
-				fmt.Fprintf(os.Stderr, "%s[exit: %d]%s\n", ColorRed, exitCode, ColorReset)
+				colorError.Fprintf(os.Stderr, "[exit: %d]\n", exitCode)
 			}
 		}
 
