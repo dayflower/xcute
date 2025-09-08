@@ -35,7 +35,7 @@ func main() {
 
 	flag.BoolVar(&opts.dryRun, "n", false, "dry run mode")
 	flag.BoolVar(&opts.interactive, "i", false, "interactive mode")
-	flag.BoolVar(&opts.showWhat, "w", false, "show what (input line)")
+	flag.BoolVar(&opts.showWhat, "w", false, "show target (input line)")
 	flag.BoolVar(&opts.showCommand, "l", false, "show command line")
 	flag.BoolVar(&opts.forceContinue, "f", false, "force continue on errors")
 	flag.Float64Var(&opts.interval, "t", 0, "interval between commands in seconds")

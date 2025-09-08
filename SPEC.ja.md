@@ -104,7 +104,7 @@ cat input.txt | xcute -n rm {}
 cat files.txt | xcute -i rm {}
 ```
 
-### `-w` (show what)
+### `-w` (show target)
 各行の処理前に、対象となるファイル名（入力行の内容）を標準エラー出力に表示します。ANSI colorを使用して見やすく表示します。
 
 ```bash
