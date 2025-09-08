@@ -50,15 +50,22 @@ func main() {
 		os.Exit(1)
 	}
 
-	commandTemplate := strings.Join(args, " ")
+	// Validate arguments based on execution mode
+	if opts.shellMode {
+		if len(args) != 1 {
+			fmt.Fprintf(os.Stderr, "Error: shell mode (-c) requires exactly one argument\n")
+			fmt.Fprintf(os.Stderr, "Usage: %s -c 'shell_command'\n", os.Args[0])
+			os.Exit(1)
+		}
+	}
 
-	err := processStdin(opts, commandTemplate)
+	err := processStdin(opts, args)
 	if err != nil {
 		os.Exit(1)
 	}
 }
 
-func processStdin(opts Options, commandTemplate string) error {
+func processStdin(opts Options, args []string) error {
 	scanner := bufio.NewScanner(os.Stdin)
 	lastErrorCode := 0
 
@@ -77,33 +84,61 @@ func processStdin(opts Options, commandTemplate string) error {
 			fmt.Fprintf(os.Stderr, "%s%s%s\n", ColorCyan, line, ColorReset)
 		}
 
-		// Replace placeholders
-		command := replacePlaceholders(commandTemplate, line)
+		// Replace placeholders and prepare command
+		var commandDisplay string
+		var exitCode int
+		
+		if opts.shellMode {
+			// Shell mode: single string command
+			command := replacePlaceholders(args[0], line)
+			commandDisplay = command
+			
+			if opts.showCommand {
+				fmt.Fprintf(os.Stderr, "%s> %s%s\n", ColorBlue, command, ColorReset)
+			}
 
-		if opts.showCommand {
-			fmt.Fprintf(os.Stderr, "%s> %s%s\n", ColorBlue, command, ColorReset)
-		}
-
-		if opts.dryRun {
-			fmt.Println(command)
-			continue
-		}
-
-		if opts.interactive {
-			fmt.Fprintf(os.Stderr, "Execute: %s [y/N] ", command)
-			var response string
-			fmt.Scanln(&response)
-			if response != "y" && response != "Y" {
+			if opts.dryRun {
+				fmt.Println(command)
 				continue
 			}
-		}
 
-		// Execute command
-		var exitCode int
-		if opts.shellMode {
+			if opts.interactive {
+				fmt.Fprintf(os.Stderr, "Execute: %s [y/N] ", command)
+				var response string
+				fmt.Scanln(&response)
+				if response != "y" && response != "Y" {
+					continue
+				}
+			}
+
 			exitCode = executeShellCommand(command)
 		} else {
-			exitCode = executeDirectCommand(command)
+			// Direct mode: replace placeholders in each argument
+			commandArgs := make([]string, len(args))
+			for i, arg := range args {
+				commandArgs[i] = replacePlaceholders(arg, line)
+			}
+			commandDisplay = strings.Join(commandArgs, " ")
+			
+			if opts.showCommand {
+				fmt.Fprintf(os.Stderr, "%s> %s%s\n", ColorBlue, commandDisplay, ColorReset)
+			}
+
+			if opts.dryRun {
+				fmt.Println(commandDisplay)
+				continue
+			}
+
+			if opts.interactive {
+				fmt.Fprintf(os.Stderr, "Execute: %s [y/N] ", commandDisplay)
+				var response string
+				fmt.Scanln(&response)
+				if response != "y" && response != "Y" {
+					continue
+				}
+			}
+
+			exitCode = executeDirectCommand(commandArgs)
 		}
 
 		if opts.showCommand {
@@ -156,13 +191,12 @@ func executeShellCommand(command string) int {
 	return 0
 }
 
-func executeDirectCommand(command string) int {
-	parts := parseCommand(command)
-	if len(parts) == 0 {
+func executeDirectCommand(args []string) int {
+	if len(args) == 0 {
 		return 0
 	}
 
-	cmd := exec.Command(parts[0], parts[1:]...)
+	cmd := exec.Command(args[0], args[1:]...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	
@@ -175,35 +209,3 @@ func executeDirectCommand(command string) int {
 	return 0
 }
 
-// parseCommand splits a command string into parts, handling quoted arguments
-func parseCommand(command string) []string {
-	var parts []string
-	var current strings.Builder
-	inQuotes := false
-	escaped := false
-
-	for _, char := range command {
-		switch {
-		case escaped:
-			current.WriteRune(char)
-			escaped = false
-		case char == '\\':
-			escaped = true
-		case char == '"':
-			inQuotes = !inQuotes
-		case char == ' ' && !inQuotes:
-			if current.Len() > 0 {
-				parts = append(parts, current.String())
-				current.Reset()
-			}
-		default:
-			current.WriteRune(char)
-		}
-	}
-
-	if current.Len() > 0 {
-		parts = append(parts, current.String())
-	}
-
-	return parts
-}
