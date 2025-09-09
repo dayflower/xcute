@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -20,6 +21,65 @@ type Options struct {
 	forceContinue bool
 	interval    float64
 	shellMode   bool
+}
+
+// CommandExecutor interface for command execution abstraction
+type CommandExecutor interface {
+	ExecuteShell(command string) int
+	ExecuteDirect(args []string) int
+}
+
+// RealCommandExecutor implements CommandExecutor using actual system commands
+type RealCommandExecutor struct {
+	stdout io.Writer
+	stderr io.Writer
+}
+
+func NewRealCommandExecutor(stdout, stderr io.Writer) *RealCommandExecutor {
+	return &RealCommandExecutor{
+		stdout: stdout,
+		stderr: stderr,
+	}
+}
+
+func (e *RealCommandExecutor) ExecuteShell(command string) int {
+	cmd := exec.Command("sh", "-c", command)
+	cmd.Stdout = e.stdout
+	cmd.Stderr = e.stderr
+	
+	if err := cmd.Run(); err != nil {
+		if exitError, ok := err.(*exec.ExitError); ok {
+			return exitError.ExitCode()
+		}
+		return 1
+	}
+	return 0
+}
+
+func (e *RealCommandExecutor) ExecuteDirect(args []string) int {
+	if len(args) == 0 {
+		return 0
+	}
+
+	cmd := exec.Command(args[0], args[1:]...)
+	cmd.Stdout = e.stdout
+	cmd.Stderr = e.stderr
+	
+	if err := cmd.Run(); err != nil {
+		if exitError, ok := err.(*exec.ExitError); ok {
+			return exitError.ExitCode()
+		}
+		return 1
+	}
+	return 0
+}
+
+// App holds the application state and dependencies
+type App struct {
+	stdin    io.Reader
+	stdout   io.Writer
+	stderr   io.Writer
+	executor CommandExecutor
 }
 
 // Color functions for output
@@ -60,14 +120,22 @@ func main() {
 		}
 	}
 
-	err := processStdin(opts, args)
+	app := &App{
+		stdin:    os.Stdin,
+		stdout:   os.Stdout,
+		stderr:   os.Stderr,
+		executor: NewRealCommandExecutor(os.Stdout, os.Stderr),
+	}
+
+	err := app.processStdin(opts, args)
 	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
 }
 
-func processStdin(opts Options, args []string) error {
-	scanner := bufio.NewScanner(os.Stdin)
+func (app *App) processStdin(opts Options, args []string) error {
+	scanner := bufio.NewScanner(app.stdin)
 	lastErrorCode := 0
 
 	for scanner.Scan() {
@@ -76,13 +144,13 @@ func processStdin(opts Options, args []string) error {
 		// Handle empty lines
 		if line == "" {
 			if opts.showWhat || opts.showCommand {
-				colorWarning.Fprintf(os.Stderr, "[empty line]\n")
+				colorWarning.Fprintf(app.stderr, "[empty line]\n")
 			}
 			continue
 		}
 
 		if opts.showWhat {
-			colorTarget.Fprintf(os.Stderr, "%s\n", line)
+			colorTarget.Fprintf(app.stderr, "%s\n", line)
 		}
 
 		// Replace placeholders and prepare command
@@ -95,16 +163,16 @@ func processStdin(opts Options, args []string) error {
 			commandDisplay = command
 			
 			if opts.showCommand {
-				colorCommand.Fprintf(os.Stderr, "> %s\n", command)
+				colorCommand.Fprintf(app.stderr, "> %s\n", command)
 			}
 
 			if opts.dryRun {
-				fmt.Println(command)
+				fmt.Fprintf(app.stdout, "%s\n", command)
 				continue
 			}
 
 			if opts.interactive {
-				fmt.Fprintf(os.Stderr, "Execute: %s [y/N] ", command)
+				fmt.Fprintf(app.stderr, "Execute: %s [y/N] ", command)
 				var response string
 				fmt.Scanln(&response)
 				if response != "y" && response != "Y" {
@@ -112,7 +180,7 @@ func processStdin(opts Options, args []string) error {
 				}
 			}
 
-			exitCode = executeShellCommand(command)
+			exitCode = app.executor.ExecuteShell(command)
 		} else {
 			// Direct mode: replace placeholders in each argument
 			commandArgs := make([]string, len(args))
@@ -122,16 +190,16 @@ func processStdin(opts Options, args []string) error {
 			commandDisplay = strings.Join(commandArgs, " ")
 			
 			if opts.showCommand {
-				colorCommand.Fprintf(os.Stderr, "> %s\n", commandDisplay)
+				colorCommand.Fprintf(app.stderr, "> %s\n", commandDisplay)
 			}
 
 			if opts.dryRun {
-				fmt.Println(commandDisplay)
+				fmt.Fprintf(app.stdout, "%s\n", commandDisplay)
 				continue
 			}
 
 			if opts.interactive {
-				fmt.Fprintf(os.Stderr, "Execute: %s [y/N] ", commandDisplay)
+				fmt.Fprintf(app.stderr, "Execute: %s [y/N] ", commandDisplay)
 				var response string
 				fmt.Scanln(&response)
 				if response != "y" && response != "Y" {
@@ -139,14 +207,14 @@ func processStdin(opts Options, args []string) error {
 				}
 			}
 
-			exitCode = executeDirectCommand(commandArgs)
+			exitCode = app.executor.ExecuteDirect(commandArgs)
 		}
 
 		if opts.showCommand {
 			if exitCode == 0 {
-				colorSuccess.Fprintf(os.Stderr, "[exit: %d]\n", exitCode)
+				colorSuccess.Fprintf(app.stderr, "[exit: %d]\n", exitCode)
 			} else {
-				colorError.Fprintf(os.Stderr, "[exit: %d]\n", exitCode)
+				colorError.Fprintf(app.stderr, "[exit: %d]\n", exitCode)
 			}
 		}
 
@@ -168,7 +236,7 @@ func processStdin(opts Options, args []string) error {
 	}
 
 	if lastErrorCode != 0 {
-		os.Exit(lastErrorCode)
+		return fmt.Errorf("commands completed with errors, last exit code: %d", lastErrorCode)
 	}
 
 	return nil
@@ -178,35 +246,4 @@ func replacePlaceholders(template, input string) string {
 	return strings.ReplaceAll(template, "{}", input)
 }
 
-func executeShellCommand(command string) int {
-	cmd := exec.Command("sh", "-c", command)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	
-	if err := cmd.Run(); err != nil {
-		if exitError, ok := err.(*exec.ExitError); ok {
-			return exitError.ExitCode()
-		}
-		return 1
-	}
-	return 0
-}
-
-func executeDirectCommand(args []string) int {
-	if len(args) == 0 {
-		return 0
-	}
-
-	cmd := exec.Command(args[0], args[1:]...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	
-	if err := cmd.Run(); err != nil {
-		if exitError, ok := err.(*exec.ExitError); ok {
-			return exitError.ExitCode()
-		}
-		return 1
-	}
-	return 0
-}
 
