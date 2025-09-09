@@ -53,6 +53,7 @@ brews:
       owner: dayflower
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    directory: Formula
     homepage: https://github.com/dayflower/xcute
     description: "A CLI tool that executes commands with placeholders replaced by input from stdin"
     license: MIT
