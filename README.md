@@ -89,15 +89,33 @@ cat urls.txt | xcute -t 0.5 curl -s {}
 
 ## Installation
 
+### Homebrew (macOS/Linux)
+
+```bash
+brew install dayflower/tap/xcute
+```
+
+### GitHub Releases
+
+Download pre-built binaries from the [releases page](https://github.com/dayflower/xcute/releases) for your platform:
+
+- Linux (x86_64, ARM64)
+- Windows (x86_64, ARM64) 
+- macOS (x86_64, ARM64)
+
+### Go Install
+
 ```bash
 go install github.com/dayflower/xcute@latest
 ```
 
-Or build from source:
+### Build from Source
 
 ```bash
 git clone https://github.com/dayflower/xcute.git
 cd xcute
+make build
+# or
 go build -o xcute
 ```
 
