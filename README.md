@@ -48,6 +48,7 @@ cat files.txt | xcute -c 'wc -l {} | head -1'
 - `-f`: **Force continue** - Continue execution even if errors occur
 - `-t <seconds>`: **Interval** - Wait specified seconds between command executions
 - `-c`: **Shell mode** - Execute commands through shell
+- `--color <when>`: **Color control** - Control colored output (never/always/auto)
 
 ## Examples
 
@@ -75,6 +76,10 @@ cat filelist.txt | xcute -f rm {}
 
 # With interval
 cat urls.txt | xcute -t 0.5 curl -s {}
+
+# Color control examples
+cat files.txt | xcute -l -w --color always cp {} backup/
+NO_COLOR=1 cat files.txt | xcute -l -w cp {} backup/
 ```
 
 ## Error Handling
@@ -86,6 +91,42 @@ cat urls.txt | xcute -t 0.5 curl -s {}
 
 - Empty input lines are skipped (no command execution)
 - When `-w` or `-l` options are used, empty lines are reported to stderr
+
+## Color Output Control
+
+Color output can be controlled through the `--color` option and environment variables:
+
+### Color Options
+
+- `--color never`: Disable colored output
+- `--color always`: Enable colored output regardless of output destination
+- `--color auto`: Enable colored output only when stderr is a terminal (default)
+
+### Environment Variables
+
+- `NO_COLOR`: When set to any non-empty value, disables colored output (takes precedence over `--color`)
+
+### Color Usage
+
+When enabled, colors are used for:
+- **Red**: Error messages and non-zero exit codes
+- **Green**: Success messages and zero exit codes  
+- **Yellow**: Warning messages and empty line notifications
+- **Blue**: Command line display (with `-l` option)
+- **Cyan**: Input line display (with `-w` option)
+
+### Examples
+
+```bash
+# Force color output even when redirecting
+cat files.txt | xcute -l -w --color always cp {} backup/ 2>&1 | less
+
+# Disable color output
+cat files.txt | xcute -l -w --color never cp {} backup/
+
+# Use NO_COLOR environment variable
+NO_COLOR=1 cat files.txt | xcute -l -w cp {} backup/
+```
 
 ## Installation
 

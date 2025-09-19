@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"os"
 	"strings"
 	"testing"
 )
@@ -86,6 +87,7 @@ func TestProcessStdin_DirectMode_DryRun(t *testing.T) {
 		stdout:   stdout,
 		stderr:   stderr,
 		executor: executor,
+		useColor: false,
 	}
 
 	opts := Options{
@@ -121,6 +123,7 @@ func TestProcessStdin_DirectMode_Execution(t *testing.T) {
 		stdout:   stdout,
 		stderr:   stderr,
 		executor: executor,
+		useColor: false,
 	}
 
 	opts := Options{
@@ -169,6 +172,7 @@ func TestProcessStdin_ShellMode_DryRun(t *testing.T) {
 		stdout:   stdout,
 		stderr:   stderr,
 		executor: executor,
+		useColor: false,
 	}
 
 	opts := Options{
@@ -204,6 +208,7 @@ func TestProcessStdin_ShellMode_Execution(t *testing.T) {
 		stdout:   stdout,
 		stderr:   stderr,
 		executor: executor,
+		useColor: false,
 	}
 
 	opts := Options{
@@ -245,6 +250,7 @@ func TestProcessStdin_EmptyLines(t *testing.T) {
 		stdout:   stdout,
 		stderr:   stderr,
 		executor: executor,
+		useColor: false,
 	}
 
 	opts := Options{
@@ -288,6 +294,7 @@ func TestProcessStdin_ErrorHandling(t *testing.T) {
 		stdout:   stdout,
 		stderr:   stderr,
 		executor: executor,
+		useColor: false,
 	}
 
 	opts := Options{
@@ -319,6 +326,7 @@ func TestProcessStdin_ForceContinueOnError(t *testing.T) {
 		stdout:   stdout,
 		stderr:   stderr,
 		executor: executor,
+		useColor: false,
 	}
 
 	opts := Options{
@@ -341,5 +349,112 @@ func TestProcessStdin_ForceContinueOnError(t *testing.T) {
 	// Should execute both commands despite errors
 	if len(executor.directCommands) != 2 {
 		t.Errorf("Expected 2 commands to be executed with force continue, got %d", len(executor.directCommands))
+	}
+}
+
+func TestShouldUseColor(t *testing.T) {
+	tests := []struct {
+		name        string
+		colorOption string
+		noColor     string
+		expected    bool
+	}{
+		{
+			name:        "NO_COLOR set overrides everything",
+			colorOption: "always",
+			noColor:     "1",
+			expected:    false,
+		},
+		{
+			name:        "NO_COLOR empty string doesn't disable",
+			colorOption: "always",
+			noColor:     "",
+			expected:    true,
+		},
+		{
+			name:        "color never",
+			colorOption: "never",
+			noColor:     "",
+			expected:    false,
+		},
+		{
+			name:        "color always",
+			colorOption: "always",
+			noColor:     "",
+			expected:    true,
+		},
+		{
+			name:        "color auto with buffer (non-terminal)",
+			colorOption: "auto",
+			noColor:     "",
+			expected:    false,
+		},
+		{
+			name:        "invalid color option",
+			colorOption: "invalid",
+			noColor:     "",
+			expected:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Set NO_COLOR environment variable
+			originalNoColor := os.Getenv("NO_COLOR")
+			if tt.noColor != "" {
+				os.Setenv("NO_COLOR", tt.noColor)
+			} else {
+				os.Unsetenv("NO_COLOR")
+			}
+			defer func() {
+				if originalNoColor != "" {
+					os.Setenv("NO_COLOR", originalNoColor)
+				} else {
+					os.Unsetenv("NO_COLOR")
+				}
+			}()
+
+			// Use buffer as stderr (non-terminal) for consistent testing
+			stderr := &bytes.Buffer{}
+
+			result := shouldUseColor(tt.colorOption, stderr)
+			if result != tt.expected {
+				t.Errorf("shouldUseColor(%q) = %v, want %v", tt.colorOption, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestColorOutput(t *testing.T) {
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	executor := NewMockCommandExecutor(0)
+
+	// Test with color enabled
+	appWithColor := &App{
+		stdin:    strings.NewReader("test\n"),
+		stdout:   stdout,
+		stderr:   stderr,
+		executor: executor,
+		useColor: true,
+	}
+
+	// Test with color disabled
+	appWithoutColor := &App{
+		stdin:    strings.NewReader("test\n"),
+		stdout:   stdout,
+		stderr:   stderr,
+		executor: executor,
+		useColor: false,
+	}
+
+	// Test error output
+	appWithColor.printError("error message")
+	appWithoutColor.printError("error message")
+
+	// The exact output will depend on fatih/color implementation
+	// We just verify that the methods don't crash and produce some output
+	if stderr.Len() == 0 {
+		t.Error("Expected some output to stderr")
 	}
 }
